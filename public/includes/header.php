@@ -17,7 +17,7 @@ $currentUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <!-- Custom CSS -->/
+    <!-- Custom CSS -->
     <link href="<?= BASE_URL ?>/assets/css/style.css" rel="stylesheet">
 </head>
 
@@ -51,7 +51,7 @@ $currentUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
                 <li class="nav-section">Administration</li>
                 <li>
                     <a href="<?= BASE_URL ?>/admin/dashboardAdmin.php"
-                        class="<?= str_contains($currentUri, '/admin/index') || $currentUri === '/admin/' ? 'active' : '' ?>">
+                        class="<?= str_contains($currentUri, '/admin/dashboardAdmin') || $currentUri === '/admin/' ? 'active' : '' ?>">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
                 </li>
