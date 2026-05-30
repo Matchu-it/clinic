@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $auth = new Auth();
             $auth->register($data);
-            header('Location: ' . BASE_URL . '/index.php?registered=1');
+            header('Location: ' . BASE_URL . '/loggin.php?registered=1');
             exit;
         } catch (\RuntimeException $e) {
             $errors[] = $e->getMessage();
@@ -59,7 +59,7 @@ include __DIR__ . '/includes/header.php';
             <strong>Please fix the following:</strong>
             <ul class="mb-0 mt-1 ps-3">
                 <?php foreach ($errors as $e): ?>
-                    <li><?= htmlspecialchars($e) ?></li>
+                <li><?= htmlspecialchars($e) ?></li>
                 <?php endforeach; ?>
             </ul>
         </div>
@@ -70,42 +70,39 @@ include __DIR__ . '/includes/header.php';
                 <div class="col-sm-6">
                     <label class="form-label">First Name</label>
                     <input type="text" name="first_name" class="form-control"
-                           value="<?= htmlspecialchars($data['first_name'] ?? '') ?>"
-                           placeholder="Juan" required>
+                        value="<?= htmlspecialchars($data['first_name'] ?? '') ?>" placeholder="Juan" required>
                 </div>
                 <div class="col-sm-6">
                     <label class="form-label">Last Name</label>
                     <input type="text" name="last_name" class="form-control"
-                           value="<?= htmlspecialchars($data['last_name'] ?? '') ?>"
-                           placeholder="Dela Cruz" required>
+                        value="<?= htmlspecialchars($data['last_name'] ?? '') ?>" placeholder="Dela Cruz" required>
                 </div>
                 <div class="col-sm-6">
                     <label class="form-label">Username</label>
                     <input type="text" name="username" class="form-control"
-                           value="<?= htmlspecialchars($data['username'] ?? '') ?>"
-                           placeholder="juandc123" required autocomplete="username">
+                        value="<?= htmlspecialchars($data['username'] ?? '') ?>" placeholder="juandc123" required
+                        autocomplete="username">
                 </div>
                 <div class="col-sm-6">
                     <label class="form-label">Phone</label>
                     <input type="tel" name="phone" class="form-control"
-                           value="<?= htmlspecialchars($data['phone'] ?? '') ?>"
-                           placeholder="09171234567">
+                        value="<?= htmlspecialchars($data['phone'] ?? '') ?>" placeholder="09171234567">
                 </div>
                 <div class="col-12">
                     <label class="form-label">Email Address</label>
                     <input type="email" name="email" class="form-control"
-                           value="<?= htmlspecialchars($data['email'] ?? '') ?>"
-                           placeholder="juan@email.com" required autocomplete="email">
+                        value="<?= htmlspecialchars($data['email'] ?? '') ?>" placeholder="juan@email.com" required
+                        autocomplete="email">
                 </div>
                 <div class="col-sm-6">
                     <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-control"
-                           placeholder="Min. 8 characters" required autocomplete="new-password">
+                    <input type="password" name="password" class="form-control" placeholder="Min. 8 characters" required
+                        autocomplete="new-password">
                 </div>
                 <div class="col-sm-6">
                     <label class="form-label">Confirm Password</label>
-                    <input type="password" name="confirm_password" class="form-control"
-                           placeholder="Repeat password" required>
+                    <input type="password" name="confirm_password" class="form-control" placeholder="Repeat password"
+                        required>
                 </div>
                 <div class="col-12 mt-2">
                     <button type="submit" class="btn btn-primary w-100 py-2">
