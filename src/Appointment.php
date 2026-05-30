@@ -48,7 +48,7 @@ class Appointment
     }
 
     /**
-     * Return a single appointment by ID.
+     * Return a single appointment by ID, with medical record, follow-up, and parent info.
      */
     public function getById(int $id): ?array
     {
@@ -69,6 +69,28 @@ class Appointment
             $appt['medical_record'] = $this->db->fetchOne(
                 'SELECT * FROM medical_records WHERE appointment_id = ?', [$id]
             );
+
+            // Follow-up appointment created FROM this one
+            $appt['follow_up'] = $this->db->fetchOne(
+                "SELECT a.id, a.appointment_date, a.appointment_time, a.status, a.reason,
+                        CONCAT('Dr. ',d.first_name,' ',d.last_name) AS doctor_name
+                 FROM appointments a
+                 JOIN doctors d ON a.doctor_id = d.id
+                 WHERE a.follow_up_of = ?",
+                [$id]
+            );
+
+            // Parent appointment (if this appointment IS a follow-up)
+            if (!empty($appt['follow_up_of'])) {
+                $appt['parent'] = $this->db->fetchOne(
+                    "SELECT a.id, a.appointment_date, a.appointment_time, a.status,
+                            CONCAT('Dr. ',d.first_name,' ',d.last_name) AS doctor_name
+                     FROM appointments a
+                     JOIN doctors d ON a.doctor_id = d.id
+                     WHERE a.id = ?",
+                    [(int) $appt['follow_up_of']]
+                );
+            }
         }
 
         return $appt;
@@ -130,6 +152,49 @@ class Appointment
             'UPDATE appointments SET status=? WHERE id=?', [$status, $id]
         );
         return true;
+    }
+
+    /**
+     * Reschedule an appointment to a new date/time and confirm it.
+     */
+    public function reschedule(int $id, string $date, string $time): bool
+    {
+        $this->db->execute(
+            'UPDATE appointments SET appointment_date=?, appointment_time=?, status=? WHERE id=?',
+            [$date, $time, 'confirmed', $id]
+        );
+        return true;
+    }
+
+    /**
+     * Create a follow-up appointment linked to a parent appointment.
+     * Inherits the patient from the parent; doctor can be changed.
+     *
+     * @return int New appointment ID
+     */
+    public function createFollowUp(int $parentId, array $data): int
+    {
+        $parent = $this->db->fetchOne('SELECT * FROM appointments WHERE id=?', [$parentId]);
+        if (!$parent) {
+            throw new \InvalidArgumentException('Parent appointment not found.');
+        }
+
+        $this->db->execute(
+            'INSERT INTO appointments (patient_id, doctor_id, appointment_date,
+             appointment_time, reason, notes, status, follow_up_of)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                $parent['patient_id'],
+                (int) ($data['doctor_id'] ?? $parent['doctor_id']),
+                $data['appointment_date'],
+                $data['appointment_time'],
+                $data['reason'] ?: 'Follow-up appointment',
+                $data['notes'] ?? null,
+                'confirmed',
+                $parentId,
+            ]
+        );
+        return (int) $this->db->lastInsertId();
     }
 
     /**
