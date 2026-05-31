@@ -207,23 +207,71 @@ class Appointment
     }
 
     /**
-     * Save or update a medical record for an appointment.
+     * Save or update a medical record (text fields) for an appointment.
+     * Optionally includes pdf_path / pdf_original_name.
      */
     public function saveMedicalRecord(int $appointmentId, array $data): void
     {
         $existing = $this->db->fetchOne(
             'SELECT id FROM medical_records WHERE appointment_id=?', [$appointmentId]
         );
+
         if ($existing) {
+            $setParts = ['diagnosis=?', 'prescription=?', 'notes=?'];
+            $values   = [
+                $data['diagnosis']    ?? null,
+                $data['prescription'] ?? null,
+                $data['notes']        ?? null,
+            ];
+            if (array_key_exists('pdf_path', $data)) {
+                $setParts[] = 'pdf_path=?';
+                $values[]   = $data['pdf_path'];
+            }
+            if (array_key_exists('pdf_original_name', $data)) {
+                $setParts[] = 'pdf_original_name=?';
+                $values[]   = $data['pdf_original_name'];
+            }
+            $values[] = $appointmentId;
             $this->db->execute(
-                'UPDATE medical_records SET diagnosis=?, prescription=?, notes=? WHERE appointment_id=?',
-                [$data['diagnosis']??null, $data['prescription']??null, $data['notes']??null, $appointmentId]
+                'UPDATE medical_records SET ' . implode(', ', $setParts) . ' WHERE appointment_id=?',
+                $values
             );
         } else {
             $this->db->execute(
-                'INSERT INTO medical_records (appointment_id, diagnosis, prescription, notes)
-                 VALUES (?, ?, ?, ?)',
-                [$appointmentId, $data['diagnosis']??null, $data['prescription']??null, $data['notes']??null]
+                'INSERT INTO medical_records
+                 (appointment_id, diagnosis, prescription, notes, pdf_path, pdf_original_name)
+                 VALUES (?, ?, ?, ?, ?, ?)',
+                [
+                    $appointmentId,
+                    $data['diagnosis']         ?? null,
+                    $data['prescription']      ?? null,
+                    $data['notes']             ?? null,
+                    $data['pdf_path']          ?? null,
+                    $data['pdf_original_name'] ?? null,
+                ]
+            );
+        }
+    }
+
+    /**
+     * Upload or replace a PDF medical record file for an appointment.
+     * Creates the medical_records row if it does not exist yet.
+     */
+    public function updateMedicalRecordPdf(int $appointmentId, string $pdfPath, string $pdfOriginalName): void
+    {
+        $existing = $this->db->fetchOne(
+            'SELECT id FROM medical_records WHERE appointment_id=?', [$appointmentId]
+        );
+        if ($existing) {
+            $this->db->execute(
+                'UPDATE medical_records SET pdf_path=?, pdf_original_name=? WHERE appointment_id=?',
+                [$pdfPath, $pdfOriginalName, $appointmentId]
+            );
+        } else {
+            $this->db->execute(
+                'INSERT INTO medical_records (appointment_id, pdf_path, pdf_original_name)
+                 VALUES (?, ?, ?)',
+                [$appointmentId, $pdfPath, $pdfOriginalName]
             );
         }
     }

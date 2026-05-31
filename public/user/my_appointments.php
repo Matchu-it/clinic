@@ -66,7 +66,9 @@ include dirname(__DIR__) . '/includes/header.php';
 <?php endif; ?>
 
 <?php if ($viewRecord): ?>
-<!-- ===== MEDICAL RECORD VIEW ===== -->
+<!-- ══════════════════════════════════════════════════════════════
+     MEDICAL RECORD VIEW
+═════════════════════════════════════════════════════════════════ -->
 <div class="row g-4 mb-4">
 
     <!-- Medical Record Card -->
@@ -90,12 +92,32 @@ include dirname(__DIR__) . '/includes/header.php';
                     at <?= date('g:i A', strtotime($viewRecord['appointment_time'])) ?>
                 </div>
                 <div class="mt-1">
-                    <span
-                        class="status-badge status-<?= $viewRecord['status'] ?>"><?= ucfirst($viewRecord['status']) ?></span>
+                    <span class="status-badge status-<?= $viewRecord['status'] ?>">
+                        <?= ucfirst($viewRecord['status']) ?>
+                    </span>
                 </div>
             </div>
 
             <?php if ($viewRecord['medical_record']): $mr = $viewRecord['medical_record']; ?>
+
+            <!-- ── PDF Download Banner ─────────────────────────────── -->
+            <?php if (!empty($mr['pdf_path'])): ?>
+            <div class="alert alert-primary d-flex align-items-center justify-content-between gap-2 mb-3 py-2">
+                <div class="d-flex align-items-center gap-2 overflow-hidden">
+                    <i class="bi bi-file-earmark-pdf-fill text-danger fs-5 flex-shrink-0"></i>
+                    <div class="overflow-hidden">
+                        <div class="fw-semibold small">PDF Report Available</div>
+                        <div class="text-muted text-truncate" style="max-width:180px;font-size:.78rem">
+                            <?= htmlspecialchars($mr['pdf_original_name'] ?? 'medical_record.pdf') ?>
+                        </div>
+                    </div>
+                </div>
+                <a href="<?= BASE_URL ?>/serve_record.php?appt=<?= $viewRecord['id'] ?>"
+                    class="btn btn-sm btn-primary flex-shrink-0" target="_blank">
+                    <i class="bi bi-download me-1"></i>Download
+                </a>
+            </div>
+            <?php endif; ?>
 
             <?php if ($mr['diagnosis']): ?>
             <div class="mb-3">
@@ -124,9 +146,9 @@ include dirname(__DIR__) . '/includes/header.php';
             </div>
             <?php endif; ?>
 
-            <?php if (!$mr['diagnosis'] && !$mr['prescription'] && !$mr['notes']): ?>
+            <?php if (!$mr['diagnosis'] && !$mr['prescription'] && !$mr['notes'] && empty($mr['pdf_path'])): ?>
             <p class="text-muted mb-0">
-                <i class="bi bi-info-circle me-1"></i>Your medical record has been created but no details have been
+                <i class="bi bi-info-circle me-1"></i>Your medical record has been created but details haven't been
                 filled in yet. Please check back later.
             </p>
             <?php endif; ?>
@@ -225,7 +247,9 @@ include dirname(__DIR__) . '/includes/header.php';
         <div class="empty-state">
             <i class="bi bi-calendar-x d-block"></i>
             <h6>No appointments found</h6>
-            <a href="<?= BASE_URL ?>/user/book.php" class="btn btn-primary btn-sm mt-2">Book Your First Appointment</a>
+            <a href="<?= BASE_URL ?>/user/book.php" class="btn btn-primary btn-sm mt-2">
+                Book Your First Appointment
+            </a>
         </div>
         <?php else: ?>
         <table class="table">
@@ -247,8 +271,16 @@ include dirname(__DIR__) . '/includes/header.php';
                     <td><small class="text-muted"><?= htmlspecialchars($a['specialty']) ?></small></td>
                     <td><?= date('M j, Y', strtotime($a['appointment_date'])) ?></td>
                     <td><?= date('g:i A', strtotime($a['appointment_time'])) ?></td>
-                    <td><span class="status-badge status-<?= $a['status'] ?>"><?= ucfirst($a['status']) ?></span></td>
-                    <td><small><?= htmlspecialchars(substr($a['reason'], 0, 40)) ?><?= strlen($a['reason']) > 40 ? '...' : '' ?></small>
+                    <td>
+                        <span class="status-badge status-<?= $a['status'] ?>">
+                            <?= ucfirst($a['status']) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <small>
+                            <?= htmlspecialchars(substr($a['reason'], 0, 40)) ?>
+                            <?= strlen($a['reason']) > 40 ? '…' : '' ?>
+                        </small>
                     </td>
                     <td>
                         <div class="d-flex gap-1 flex-wrap">

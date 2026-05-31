@@ -9,19 +9,26 @@ $message     = '';
 $msgType     = 'success';
 $viewAppt    = null;
 
-// Handle POST
+// ── Storage directory (outside public webroot) ────────────────────────────
+$storageDir = dirname(__DIR__, 2) . '/storage/medical_records/';
+
+// ── Handle POST ───────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $id     = (int) ($_POST['id'] ?? 0);
     try {
+
+        // ── 1. Quick confirm ──────────────────────────────────────────────
         if ($action === 'confirm') {
             $apptModel->updateStatus($id, 'confirmed');
             $message = 'Appointment confirmed.';
 
+        // ── 2. Generic status update ──────────────────────────────────────
         } elseif ($action === 'update_status') {
             $apptModel->updateStatus($id, $_POST['status']);
             $message = 'Appointment status updated.';
 
+        // ── 3. Reschedule ─────────────────────────────────────────────────
         } elseif ($action === 'reschedule') {
             $newDate = trim($_POST['new_date'] ?? '');
             $newTime = trim($_POST['new_time'] ?? '');
@@ -34,6 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $apptModel->reschedule($id, $newDate, $newTime);
             $message = 'Appointment rescheduled and confirmed.';
 
+        // ── 4. Mark as complete (quick button from list or detail) ─────────
+        } elseif ($action === 'mark_complete') {
+            $apptModel->updateStatus($id, 'completed');
+            $message = 'Appointment marked as completed. You can now add a medical record and schedule a follow-up.';
+            $_POST['view'] = $id; // redirect to detail view
+
+        // ── 5. Save text medical record & complete ────────────────────────
         } elseif ($action === 'save_record') {
             $apptModel->saveMedicalRecord($id, [
                 'diagnosis'    => $_POST['diagnosis']    ?? '',
@@ -41,8 +55,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'notes'        => $_POST['notes']        ?? '',
             ]);
             $apptModel->updateStatus($id, 'completed');
-            $message = 'Medical record saved and appointment marked completed.';
+            $message = 'Medical record saved and appointment marked as completed.';
 
+        // ── 6. Upload PDF medical record ──────────────────────────────────
+        } elseif ($action === 'upload_pdf') {
+            if (empty($_FILES['medical_pdf']['name'])) {
+                throw new \InvalidArgumentException('Please select a PDF file to upload.');
+            }
+            $file = $_FILES['medical_pdf'];
+
+            // Upload error codes
+            $uploadErrors = [
+                UPLOAD_ERR_INI_SIZE  => 'File exceeds server upload limit.',
+                UPLOAD_ERR_FORM_SIZE => 'File exceeds form upload limit.',
+                UPLOAD_ERR_PARTIAL   => 'File was only partially uploaded.',
+                UPLOAD_ERR_NO_FILE   => 'No file was uploaded.',
+                UPLOAD_ERR_NO_TMP_DIR=> 'Missing temporary folder.',
+                UPLOAD_ERR_CANT_WRITE=> 'Failed to write file to disk.',
+            ];
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                throw new \RuntimeException($uploadErrors[$file['error']] ?? 'Upload failed.');
+            }
+
+            // Size limit: 10 MB
+            if ($file['size'] > 10 * 1024 * 1024) {
+                throw new \InvalidArgumentException('File too large. Maximum allowed size is 10 MB.');
+            }
+
+            // Verify it is truly a PDF (magic bytes check)
+            $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            if ($mimeType !== 'application/pdf') {
+                throw new \InvalidArgumentException('Only PDF files are accepted.');
+            }
+
+            // Create storage directory if it does not exist yet
+            if (!is_dir($storageDir)) {
+                mkdir($storageDir, 0755, true);
+            }
+
+            // Delete the old PDF if one already exists for this appointment
+            $existing = $apptModel->getById($id);
+            if (!empty($existing['medical_record']['pdf_path'])) {
+                $oldFile = $storageDir . basename($existing['medical_record']['pdf_path']);
+                if (file_exists($oldFile)) {
+                    unlink($oldFile);
+                }
+            }
+
+            // Unique filename: record_<id>_<timestamp>_<random>.pdf
+            $uniqueName = sprintf('record_%d_%d_%s.pdf', $id, time(), bin2hex(random_bytes(4)));
+            if (!move_uploaded_file($file['tmp_name'], $storageDir . $uniqueName)) {
+                throw new \RuntimeException('Failed to save the uploaded file. Please try again.');
+            }
+
+            $apptModel->updateMedicalRecordPdf($id, $uniqueName, basename($file['name']));
+            $apptModel->updateStatus($id, 'completed');
+            $message = 'PDF uploaded successfully and appointment marked as completed.';
+            $_POST['view'] = $id;
+
+        // ── 7. Create follow-up appointment ───────────────────────────────
         } elseif ($action === 'create_followup') {
             $fuDoctorId = (int) ($_POST['fu_doctor_id'] ?? 0);
             $fuDate     = trim($_POST['fu_date'] ?? '');
@@ -60,10 +133,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $message = 'Follow-up appointment scheduled (Appointment #' . $followUpId . ').';
 
+        // ── 8. Delete ─────────────────────────────────────────────────────
         } elseif ($action === 'delete') {
+            // Also clean up any stored PDF
+            $toDelete = $apptModel->getById($id);
+            if (!empty($toDelete['medical_record']['pdf_path'])) {
+                $pdfFile = $storageDir . basename($toDelete['medical_record']['pdf_path']);
+                if (file_exists($pdfFile)) {
+                    unlink($pdfFile);
+                }
+            }
             $apptModel->delete($id);
             $message = 'Appointment deleted.';
 
+        // ── 9. Create new appointment ─────────────────────────────────────
         } elseif ($action === 'create') {
             $apptModel->create([
                 'patient_id'       => (int) $_POST['patient_id'],
@@ -76,19 +159,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $message = 'Appointment created successfully.';
         }
+
     } catch (\Exception $e) {
         $message = $e->getMessage();
         $msgType = 'danger';
     }
 }
 
+// ── Load detail view if requested ─────────────────────────────────────────
 if (isset($_GET['view'])) {
     $viewAppt = $apptModel->getById((int) $_GET['view']);
 } elseif (!empty($_POST['view'])) {
     $viewAppt = $apptModel->getById((int) $_POST['view']);
 }
 
-// Filters
+// ── Filters & data ────────────────────────────────────────────────────────
 $filterStatus = $_GET['status'] ?? '';
 $allAppts     = $apptModel->getAll();
 $appointments = $filterStatus
@@ -124,13 +209,17 @@ include dirname(__DIR__) . '/includes/header.php';
     $apptTs    = strtotime($viewAppt['appointment_date'] . ' ' . $viewAppt['appointment_time']);
     $isPastDue = $apptTs < $nowTs;
     $canAct    = in_array($viewAppt['status'], ['pending', 'confirmed']);
+    $hasPdf    = !empty($viewAppt['medical_record']['pdf_path']);
 ?>
-<!-- ===== DETAIL VIEW ===== -->
 
-<!-- Row 1: Details + Medical Record -->
+<!-- ══════════════════════════════════════════════════════════════════════
+     DETAIL VIEW
+════════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Row 1: Details + Medical Record ─────────────────────────────────── -->
 <div class="row g-4 mb-4">
 
-    <!-- Card 1: Appointment Details + Actions -->
+    <!-- ── Card 1: Appointment Details & Actions ───────────────────────── -->
     <div class="col-lg-6">
         <div class="form-card h-100">
             <h5 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Appointment Details</h5>
@@ -165,8 +254,10 @@ include dirname(__DIR__) . '/includes/header.php';
                     <?php endif; ?>
                 </dd>
                 <dt class="col-5 text-muted">Status</dt>
-                <dd class="col-7"><span
-                        class="status-badge status-<?= $viewAppt['status'] ?>"><?= ucfirst($viewAppt['status']) ?></span>
+                <dd class="col-7">
+                    <span class="status-badge status-<?= $viewAppt['status'] ?>">
+                        <?= ucfirst($viewAppt['status']) ?>
+                    </span>
                 </dd>
                 <dt class="col-5 text-muted">Reason</dt>
                 <dd class="col-7"><?= htmlspecialchars($viewAppt['reason']) ?></dd>
@@ -178,8 +269,8 @@ include dirname(__DIR__) . '/includes/header.php';
 
             <hr class="my-3">
 
+            <!-- Quick Confirm (pending, not yet past due) -->
             <?php if ($viewAppt['status'] === 'pending' && !$isPastDue): ?>
-            <!-- Pending + not yet due: offer quick Confirm -->
             <form method="post" class="mb-3">
                 <input type="hidden" name="action" value="confirm">
                 <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
@@ -190,109 +281,171 @@ include dirname(__DIR__) . '/includes/header.php';
             </form>
             <?php endif; ?>
 
-            <?php if ($isPastDue && $canAct): ?>
-            <!-- Past due: Complete or Reschedule -->
-            <div class="alert alert-warning mb-3">
-                <div class="fw-semibold mb-2">
-                    <i class="bi bi-clock-history me-1"></i>This appointment's scheduled time has passed
+            <?php if ($canAct): ?>
+            <!-- ── Mark as Complete (always shown for active appointments) ── -->
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <form method="post" class="d-inline"
+                    onsubmit="return confirm('Mark this appointment as completed? This cannot be undone.')">
+                    <input type="hidden" name="action" value="mark_complete">
+                    <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
+                    <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
+                    <button class="btn btn-primary">
+                        <i class="bi bi-clipboard-check me-2"></i>Mark as Completed
+                    </button>
+                </form>
+            </div>
+
+            <?php if ($isPastDue): ?>
+            <!-- Reschedule panel (past-due only) -->
+            <div class="border rounded p-3 mb-3 bg-light">
+                <div class="small fw-semibold text-warning mb-2">
+                    <i class="bi bi-clock-history me-1"></i>Scheduled time has passed — reschedule if needed
                 </div>
-                <div class="d-flex gap-2 flex-wrap mb-3">
-                    <form method="post" class="d-inline">
-                        <input type="hidden" name="action" value="update_status">
-                        <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
-                        <input type="hidden" name="status" value="completed">
-                        <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
-                        <button class="btn btn-primary btn-sm">
-                            <i class="bi bi-clipboard-check me-1"></i>Mark as Completed
-                        </button>
-                    </form>
-                </div>
-                <div class="border-top pt-2">
-                    <div class="small fw-semibold mb-2">Or reschedule to a new date:</div>
-                    <form method="post" class="d-flex gap-2 flex-wrap align-items-end">
-                        <input type="hidden" name="action" value="reschedule">
-                        <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
-                        <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
-                        <div>
-                            <label class="form-label small mb-1">New Date</label>
-                            <input type="date" name="new_date" class="form-control form-control-sm"
-                                min="<?= date('Y-m-d') ?>" required>
-                        </div>
-                        <div>
-                            <label class="form-label small mb-1">New Time</label>
-                            <input type="time" name="new_time" class="form-control form-control-sm" required>
-                        </div>
-                        <button class="btn btn-warning btn-sm">
-                            <i class="bi bi-calendar-event me-1"></i>Reschedule
-                        </button>
-                    </form>
-                </div>
+                <form method="post" class="d-flex gap-2 flex-wrap align-items-end">
+                    <input type="hidden" name="action" value="reschedule">
+                    <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
+                    <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
+                    <div>
+                        <label class="form-label small mb-1">New Date</label>
+                        <input type="date" name="new_date" class="form-control form-control-sm"
+                            min="<?= date('Y-m-d') ?>" required>
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1">New Time</label>
+                        <input type="time" name="new_time" class="form-control form-control-sm" required>
+                    </div>
+                    <button class="btn btn-warning btn-sm">
+                        <i class="bi bi-calendar-event me-1"></i>Reschedule
+                    </button>
+                </form>
             </div>
             <?php endif; ?>
+            <?php endif; ?>
 
-            <!-- Generic status change -->
+            <!-- Generic status dropdown -->
             <form method="post" class="d-flex gap-2 flex-wrap align-items-center">
                 <input type="hidden" name="action" value="update_status">
                 <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
                 <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
                 <select name="status" class="form-select form-select-sm" style="width:auto">
                     <?php foreach (['pending','confirmed','cancelled','completed'] as $s): ?>
-                    <option value="<?= $s ?>" <?= $viewAppt['status'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?>
+                    <option value="<?= $s ?>" <?= $viewAppt['status'] === $s ? 'selected' : '' ?>>
+                        <?= ucfirst($s) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
                 <button class="btn btn-sm btn-outline-primary">Update Status</button>
-                <a href="<?= BASE_URL ?>/admin/appointments.php" class="btn btn-sm btn-outline-secondary">Back to
-                    List</a>
+                <a href="<?= BASE_URL ?>/admin/appointments.php" class="btn btn-sm btn-outline-secondary">
+                    Back to List
+                </a>
             </form>
         </div>
     </div>
 
-    <!-- Card 2: Medical Record -->
+    <!-- ── Card 2: Medical Record ─────────────────────────────────────── -->
     <div class="col-lg-6">
         <div class="form-card h-100">
             <h5 class="fw-bold mb-3"><i class="bi bi-clipboard-pulse me-2"></i>Medical Record</h5>
-            <p class="text-muted small">Fill in after the patient's visit. Saving will mark the appointment as
-                completed.</p>
+
+            <!-- ── Existing PDF banner ─────────────────────────────────── -->
+            <?php if ($hasPdf): ?>
+            <div class="alert alert-success d-flex align-items-center justify-content-between gap-2 mb-3 py-2">
+                <div class="d-flex align-items-center gap-2 overflow-hidden">
+                    <i class="bi bi-file-earmark-pdf-fill text-danger fs-5 flex-shrink-0"></i>
+                    <div class="overflow-hidden">
+                        <div class="fw-semibold small">PDF Report Uploaded</div>
+                        <div class="text-muted text-truncate" style="max-width:200px;font-size:.78rem">
+                            <?= htmlspecialchars($viewAppt['medical_record']['pdf_original_name']) ?>
+                        </div>
+                    </div>
+                </div>
+                <a href="<?= BASE_URL ?>/serve_record.php?appt=<?= $viewAppt['id'] ?>"
+                    class="btn btn-sm btn-success flex-shrink-0" target="_blank">
+                    <i class="bi bi-eye me-1"></i>View PDF
+                </a>
+            </div>
+            <?php endif; ?>
+
+            <!-- ── Text record form ────────────────────────────────────── -->
+            <p class="text-muted small mb-3">
+                Fill in after the patient's visit. Saving will mark the appointment as completed.
+            </p>
             <form method="post">
                 <input type="hidden" name="action" value="save_record">
                 <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
                 <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
                 <div class="mb-3">
                     <label class="form-label">Diagnosis</label>
-                    <textarea name="diagnosis" class="form-control"
-                        rows="2"><?= htmlspecialchars($viewAppt['medical_record']['diagnosis'] ?? '') ?></textarea>
+                    <textarea name="diagnosis" class="form-control" rows="2"><?=
+                        htmlspecialchars($viewAppt['medical_record']['diagnosis'] ?? '')
+                    ?></textarea>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Prescription</label>
-                    <textarea name="prescription" class="form-control"
-                        rows="2"><?= htmlspecialchars($viewAppt['medical_record']['prescription'] ?? '') ?></textarea>
+                    <textarea name="prescription" class="form-control" rows="2"><?=
+                        htmlspecialchars($viewAppt['medical_record']['prescription'] ?? '')
+                    ?></textarea>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Doctor's Notes</label>
-                    <textarea name="notes" class="form-control"
-                        rows="2"><?= htmlspecialchars($viewAppt['medical_record']['notes'] ?? '') ?></textarea>
+                    <textarea name="notes" class="form-control" rows="2"><?=
+                        htmlspecialchars($viewAppt['medical_record']['notes'] ?? '')
+                    ?></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-save me-1"></i>Save Medical Record &amp; Complete
+                    <i class="bi bi-save me-1"></i>Save Record &amp; Complete
                 </button>
+            </form>
+
+            <!-- ── PDF Upload ──────────────────────────────────────────── -->
+            <hr class="my-3">
+            <h6 class="fw-semibold mb-1">
+                <i class="bi bi-file-earmark-pdf me-1 text-danger"></i>
+                Upload PDF Report
+                <span class="badge bg-light text-secondary ms-1" style="font-size:.68rem">optional</span>
+            </h6>
+            <p class="text-muted small mb-2">
+                Upload a signed PDF report to make it downloadable from the patient's dashboard.
+                Max 10 MB.
+            </p>
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="upload_pdf">
+                <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
+                <input type="hidden" name="view" value="<?= $viewAppt['id'] ?>">
+                <div class="input-group input-group-sm">
+                    <input type="file" name="medical_pdf" class="form-control form-control-sm"
+                        accept=".pdf,application/pdf" required>
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="bi bi-upload me-1"></i>
+                        <?= $hasPdf ? 'Replace PDF' : 'Upload PDF' ?>
+                    </button>
+                </div>
+                <?php if ($hasPdf): ?>
+                <div class="form-text text-warning">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Uploading a new PDF will permanently replace the existing one.
+                </div>
+                <?php endif; ?>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Row 2: Follow-up Appointment -->
+<!-- ── Row 2: Follow-up Appointment ──────────────────────────────────────── -->
 <div class="row g-4 mb-4">
     <div class="col-12">
         <div class="form-card">
-            <h5 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-info"></i>Follow-up Appointment</h5>
+            <h5 class="fw-bold mb-3">
+                <i class="bi bi-arrow-repeat me-2 text-info"></i>Follow-up Appointment
+            </h5>
 
             <?php if (!empty($viewAppt['follow_up'])): ?>
-            <!-- A follow-up already exists for this appointment -->
+            <!-- A follow-up is already scheduled -->
             <div class="alert alert-success mb-0">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                     <div>
-                        <div class="fw-semibold"><i class="bi bi-check-circle me-1"></i>Follow-up already scheduled
+                        <div class="fw-semibold">
+                            <i class="bi bi-check-circle me-1"></i>Follow-up already scheduled
                         </div>
                         <div class="mt-1 small">
                             <i class="bi bi-calendar me-1"></i>
@@ -305,8 +458,9 @@ include dirname(__DIR__) . '/includes/header.php';
                             <span class="status-badge status-<?= $viewAppt['follow_up']['status'] ?>">
                                 <?= ucfirst($viewAppt['follow_up']['status']) ?>
                             </span>
-                            <small
-                                class="text-muted ms-2"><?= htmlspecialchars($viewAppt['follow_up']['reason']) ?></small>
+                            <small class="text-muted ms-2">
+                                <?= htmlspecialchars($viewAppt['follow_up']['reason']) ?>
+                            </small>
                         </div>
                     </div>
                     <a href="<?= BASE_URL ?>/admin/appointments.php?view=<?= $viewAppt['follow_up']['id'] ?>"
@@ -317,9 +471,10 @@ include dirname(__DIR__) . '/includes/header.php';
             </div>
 
             <?php elseif ($viewAppt['status'] === 'completed'): ?>
-            <!-- Completed, no follow-up yet — show scheduling form -->
-            <p class="text-muted small mb-3">Schedule a follow-up visit for the patient if further consultation is
-                needed.</p>
+            <!-- Completed — show follow-up scheduling form -->
+            <p class="text-muted small mb-3">
+                Schedule a follow-up visit if further consultation is needed.
+            </p>
             <form method="post">
                 <input type="hidden" name="action" value="create_followup">
                 <input type="hidden" name="id" value="<?= $viewAppt['id'] ?>">
@@ -352,7 +507,9 @@ include dirname(__DIR__) . '/includes/header.php';
                             placeholder="e.g. Check recovery progress">
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Notes <small class="text-muted">(optional)</small></label>
+                        <label class="form-label">
+                            Notes <small class="text-muted">(optional)</small>
+                        </label>
                         <textarea name="fu_notes" class="form-control" rows="1"
                             placeholder="Additional instructions for the follow-up..."></textarea>
                     </div>
@@ -366,18 +523,23 @@ include dirname(__DIR__) . '/includes/header.php';
 
             <?php else: ?>
             <!-- Not yet completed -->
-            <p class="text-muted mb-0">
-                <i class="bi bi-lock me-1"></i>
-                Complete the appointment and save a medical record first before scheduling a follow-up.
-            </p>
+            <div class="d-flex align-items-center gap-3 text-muted">
+                <i class="bi bi-lock fs-4"></i>
+                <div>
+                    <div class="fw-semibold text-body">Follow-up scheduling is locked</div>
+                    <div class="small">
+                        Complete the appointment first (or save a medical record) to unlock follow-up booking.
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
         </div>
     </div>
 </div>
 
-<?php endif; ?>
+<?php endif; // end detail view ?>
 
-<!-- Filter tabs -->
+<!-- ── Filter Tabs ─────────────────────────────────────────────────────── -->
 <div class="mb-3">
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= BASE_URL ?>/admin/appointments.php"
@@ -391,7 +553,7 @@ include dirname(__DIR__) . '/includes/header.php';
     </div>
 </div>
 
-<!-- Appointments Table -->
+<!-- ── Appointments Table ─────────────────────────────────────────────── -->
 <div class="table-card">
     <div class="table-card-header">
         <h5><i class="bi bi-list-ul me-2"></i>Appointments (<?= count($appointments) ?>)</h5>
@@ -417,8 +579,8 @@ include dirname(__DIR__) . '/includes/header.php';
             </thead>
             <tbody>
                 <?php foreach ($appointments as $a):
-                    $aTs       = strtotime($a['appointment_date'] . ' ' . $a['appointment_time']);
-                    $aPastDue  = $aTs < time() && in_array($a['status'], ['pending','confirmed']);
+                    $aTs      = strtotime($a['appointment_date'] . ' ' . $a['appointment_time']);
+                    $aPastDue = $aTs < time() && in_array($a['status'], ['pending','confirmed']);
                 ?>
                 <tr>
                     <td class="text-muted"><?= $a['id'] ?></td>
@@ -439,15 +601,27 @@ include dirname(__DIR__) . '/includes/header.php';
                         </div>
                         <small class="text-muted"><?= date('g:i A', strtotime($a['appointment_time'])) ?></small>
                     </td>
-                    <td><span class="status-badge status-<?= $a['status'] ?>"><?= ucfirst($a['status']) ?></span></td>
-                    <td><small><?= htmlspecialchars(substr($a['reason'], 0, 40)) ?><?= strlen($a['reason']) > 40 ? '...' : '' ?></small>
+                    <td>
+                        <span class="status-badge status-<?= $a['status'] ?>">
+                            <?= ucfirst($a['status']) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <small>
+                            <?= htmlspecialchars(substr($a['reason'], 0, 40)) ?>
+                            <?= strlen($a['reason']) > 40 ? '…' : '' ?>
+                        </small>
                     </td>
                     <td>
                         <div class="d-flex gap-1 flex-wrap">
+
+                            <!-- View detail -->
                             <a href="<?= BASE_URL ?>/admin/appointments.php?view=<?= $a['id'] ?>"
-                                class="btn btn-sm btn-outline-primary btn-icon" title="View">
+                                class="btn btn-sm btn-outline-primary btn-icon" title="View / Edit">
                                 <i class="bi bi-eye"></i>
                             </a>
+
+                            <!-- Confirm (pending only) -->
                             <?php if ($a['status'] === 'pending'): ?>
                             <form method="post" class="d-inline">
                                 <input type="hidden" name="action" value="confirm">
@@ -457,11 +631,28 @@ include dirname(__DIR__) . '/includes/header.php';
                                 </button>
                             </form>
                             <?php endif; ?>
-                            <form method="post" onsubmit="return confirm('Delete this appointment?')">
+
+                            <!-- Mark Complete (pending or confirmed) -->
+                            <?php if (in_array($a['status'], ['pending','confirmed'])): ?>
+                            <form method="post" class="d-inline"
+                                onsubmit="return confirm('Mark appointment #<?= $a['id'] ?> as completed?')">
+                                <input type="hidden" name="action" value="mark_complete">
+                                <input type="hidden" name="id" value="<?= $a['id'] ?>">
+                                <input type="hidden" name="view" value="<?= $a['id'] ?>">
+                                <button class="btn btn-sm btn-success btn-icon" title="Mark as Completed">
+                                    <i class="bi bi-clipboard-check"></i>
+                                </button>
+                            </form>
+                            <?php endif; ?>
+
+                            <!-- Delete -->
+                            <form method="post" class="d-inline"
+                                onsubmit="return confirm('Delete this appointment? This cannot be undone.')">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
-                                <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i
-                                        class="bi bi-trash"></i></button>
+                                <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </form>
                         </div>
                     </td>
@@ -473,12 +664,14 @@ include dirname(__DIR__) . '/includes/header.php';
     </div>
 </div>
 
-<!-- Add Appointment Modal -->
+<!-- ── New Appointment Modal ──────────────────────────────────────────── -->
 <div class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>New Appointment</h5>
+                <h5 class="modal-title">
+                    <i class="bi bi-calendar-plus me-2"></i>New Appointment
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post">
@@ -490,7 +683,8 @@ include dirname(__DIR__) . '/includes/header.php';
                             <option value="">Select patient...</option>
                             <?php foreach ($patients as $p): ?>
                             <option value="<?= $p['id'] ?>">
-                                <?= htmlspecialchars($p['first_name'] . ' ' . $p['last_name']) ?></option>
+                                <?= htmlspecialchars($p['first_name'] . ' ' . $p['last_name']) ?>
+                            </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -499,9 +693,10 @@ include dirname(__DIR__) . '/includes/header.php';
                         <select name="doctor_id" class="form-select" required>
                             <option value="">Select doctor...</option>
                             <?php foreach ($doctors as $d): ?>
-                            <option value="<?= $d['id'] ?>">Dr.
-                                <?= htmlspecialchars($d['first_name'] . ' ' . $d['last_name']) ?> —
-                                <?= htmlspecialchars($d['specialty']) ?></option>
+                            <option value="<?= $d['id'] ?>">
+                                Dr. <?= htmlspecialchars($d['first_name'] . ' ' . $d['last_name']) ?>
+                                — <?= htmlspecialchars($d['specialty']) ?>
+                            </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -521,7 +716,7 @@ include dirname(__DIR__) . '/includes/header.php';
                         <textarea name="reason" class="form-control" rows="2" required></textarea>
                     </div>
                     <div class="mb-0">
-                        <label class="form-label">Notes (optional)</label>
+                        <label class="form-label">Notes <small class="text-muted">(optional)</small></label>
                         <textarea name="notes" class="form-control" rows="2"></textarea>
                     </div>
                 </div>
