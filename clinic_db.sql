@@ -36,6 +36,7 @@ CREATE TABLE `appointments` (
   `status` enum('pending','confirmed','cancelled','completed') NOT NULL DEFAULT 'pending',
   `reason` text NOT NULL,
   `notes` text DEFAULT NULL,
+  `follow_up_of` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -79,6 +80,8 @@ CREATE TABLE `medical_records` (
   `diagnosis` text DEFAULT NULL,
   `prescription` text DEFAULT NULL,
   `notes` text DEFAULT NULL,
+  `pdf_path` varchar(255) DEFAULT NULL,
+  `pdf_original_name` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -147,7 +150,8 @@ INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_
 ALTER TABLE `appointments`
   ADD PRIMARY KEY (`id`),
   ADD KEY `patient_id` (`patient_id`),
-  ADD KEY `doctor_id` (`doctor_id`);
+  ADD KEY `doctor_id` (`doctor_id`),
+  ADD KEY `follow_up_of` (`follow_up_of`);
 
 --
 -- Indexes for table `doctors`

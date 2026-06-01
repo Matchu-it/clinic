@@ -39,7 +39,11 @@ class Database
             $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci";
         }
 
-        $this->pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        try {
+            $this->pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        } catch (PDOException $e) {
+            throw new \RuntimeException('Database connection failed: ' . $e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     /**
