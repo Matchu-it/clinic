@@ -39,14 +39,14 @@ if (isset($_GET['edit'])) {
 }
 
 $patients = $userModel->getAll();
-$pageTitle = 'Manage Patients';
+$pageTitle = 'Manage Users';
 include dirname(__DIR__) . '/includes/header.php';
 ?>
 
 <div class="page-header d-flex align-items-center justify-content-between">
     <div>
-        <h2><i class="bi bi-people me-2 text-primary"></i>Patients</h2>
-        <p>Manage registered patient accounts</p>
+        <h2><i class="bi bi-people me-2 text-primary"></i>Users</h2>
+        <p>Manage registered users accounts</p>
     </div>
 </div>
 
@@ -68,32 +68,33 @@ include dirname(__DIR__) . '/includes/header.php';
             <div class="col-md-6">
                 <label class="form-label">First Name</label>
                 <input type="text" name="first_name" class="form-control"
-                       value="<?= htmlspecialchars($editUser['first_name']) ?>" required>
+                    value="<?= htmlspecialchars($editUser['first_name']) ?>" required>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Last Name</label>
                 <input type="text" name="last_name" class="form-control"
-                       value="<?= htmlspecialchars($editUser['last_name']) ?>" required>
+                    value="<?= htmlspecialchars($editUser['last_name']) ?>" required>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Email</label>
                 <input type="email" name="email" class="form-control"
-                       value="<?= htmlspecialchars($editUser['email']) ?>" required>
+                    value="<?= htmlspecialchars($editUser['email']) ?>" required>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Phone</label>
                 <input type="tel" name="phone" class="form-control"
-                       value="<?= htmlspecialchars($editUser['phone'] ?? '') ?>">
+                    value="<?= htmlspecialchars($editUser['phone'] ?? '') ?>">
             </div>
             <div class="col-md-6">
                 <label class="form-label">Role</label>
                 <select name="role" class="form-select">
                     <option value="patient" <?= $editUser['role'] === 'patient' ? 'selected' : '' ?>>Patient</option>
-                    <option value="admin"   <?= $editUser['role'] === 'admin'   ? 'selected' : '' ?>>Admin</option>
+                    <option value="admin" <?= $editUser['role'] === 'admin'   ? 'selected' : '' ?>>Admin</option>
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">New Password <small class="text-muted">(leave blank to keep current)</small></label>
+                <label class="form-label">New Password <small class="text-muted">(leave blank to keep
+                        current)</small></label>
                 <input type="password" name="password" class="form-control" placeholder="New password">
             </div>
             <div class="col-12 d-flex gap-2">
@@ -141,7 +142,8 @@ include dirname(__DIR__) . '/includes/header.php';
                             <div class="user-avatar" style="width:30px;height:30px;font-size:.75rem">
                                 <?= strtoupper(substr($u['first_name'], 0, 1)) ?>
                             </div>
-                            <span class="fw-semibold"><?= htmlspecialchars($u['first_name'] . ' ' . $u['last_name']) ?></span>
+                            <span
+                                class="fw-semibold"><?= htmlspecialchars($u['first_name'] . ' ' . $u['last_name']) ?></span>
                         </div>
                     </td>
                     <td><code><?= htmlspecialchars($u['username']) ?></code></td>
@@ -155,11 +157,13 @@ include dirname(__DIR__) . '/includes/header.php';
                     <td><small class="text-muted"><?= date('M j, Y', strtotime($u['created_at'])) ?></small></td>
                     <td>
                         <div class="d-flex gap-1">
-                            <a href="<?= BASE_URL ?>/admin/users.php?edit=<?= $u['id'] ?>" class="btn btn-sm btn-outline-primary btn-icon">
+                            <a href="<?= BASE_URL ?>/admin/users.php?edit=<?= $u['id'] ?>"
+                                class="btn btn-sm btn-outline-primary btn-icon">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             <?php if ($u['id'] !== Auth::id()): ?>
-                            <form method="post" onsubmit="return confirm('Delete this user? This will also remove all their appointments.')">
+                            <form method="post"
+                                onsubmit="return confirm('Delete this user? This will also remove all their appointments.')">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
                                 <button type="submit" class="btn btn-sm btn-outline-danger btn-icon">

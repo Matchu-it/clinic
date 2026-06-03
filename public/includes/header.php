@@ -58,7 +58,7 @@ $currentUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
                 <li>
                     <a href="<?= BASE_URL ?>/admin/users.php"
                         class="<?= str_contains($currentUri, '/admin/users') ? 'active' : '' ?>">
-                        <i class="bi bi-people"></i> Patients
+                        <i class="bi bi-people"></i> Users
                     </a>
                 </li>
                 <li>
