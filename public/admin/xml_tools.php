@@ -51,7 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['xml_file'])) {
         $importResult = match($type) {
             'appointments' => $xmlHandler->importAppointments($xmlContent),
             'doctors'      => $xmlHandler->importDoctors($xmlContent),
-            'patients'     => $xmlHandler->importPatients($xmlContent),
             default        => ['imported'=>0,'skipped'=>0,'errors'=>['Unknown type.']],
         };
         if ($importResult['imported'] > 0) {
@@ -93,34 +92,6 @@ include dirname(__DIR__) . '/includes/header.php';
     </ul>
     <?php endif; ?>
 </div>
-
-<?php if (!empty($importResult['temp_passwords'])): ?>
-<div class="alert alert-warning">
-    <div class="d-flex align-items-center mb-2">
-        <i class="bi bi-key-fill me-2 fs-5"></i>
-        <strong>Temporary Passwords Generated</strong>
-    </div>
-    <p class="mb-2 small">The following patients were imported without a password in the XML.
-        Share these one-time passwords with each patient — they are not stored in plain text and <strong>cannot be
-            recovered</strong> after you leave this page.</p>
-    <table class="table table-sm table-bordered mb-0 bg-white">
-        <thead class="table-secondary">
-            <tr>
-                <th>Username</th>
-                <th>Temporary Password</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($importResult['temp_passwords'] as $uname => $pwd): ?>
-            <tr>
-                <td><?= htmlspecialchars($uname) ?></td>
-                <td><code><?= htmlspecialchars($pwd) ?></code></td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-<?php endif; ?>
 <?php endif; ?>
 
 <div class="row g-4">
@@ -187,7 +158,6 @@ include dirname(__DIR__) . '/includes/header.php';
                     <select name="import_type" class="form-select">
                         <option value="appointments">Appointments</option>
                         <option value="doctors">Doctors</option>
-                        <option value="patients">Patients</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -209,8 +179,6 @@ include dirname(__DIR__) . '/includes/header.php';
                             data-bs-target="#sampleAppt">Appointments</button></li>
                     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab"
                             data-bs-target="#sampleDoc">Doctors</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab"
-                            data-bs-target="#samplePat">Patients</button></li>
                 </ul>
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="sampleAppt">
@@ -236,22 +204,6 @@ include dirname(__DIR__) . '/includes/header.php';
                             &lt;status&gt;active&lt;/status&gt;
                             &lt;/doctor&gt;
                             &lt;/doctors&gt;</div>
-                    </div>
-                    <div class="tab-pane fade" id="samplePat">
-                        <div class="xml-preview" style="max-height:180px">&lt;patients&gt;
-                            &lt;patient&gt;
-                            &lt;username&gt;jdoe&lt;/username&gt;
-                            &lt;email&gt;jdoe@email.com&lt;/email&gt;
-                            &lt;first_name&gt;John&lt;/first_name&gt;
-                            &lt;last_name&gt;Doe&lt;/last_name&gt;
-                            &lt;phone&gt;09171234567&lt;/phone&gt;
-                            &lt;password&gt;secret123&lt;/password&gt;
-                            &lt;/patient&gt;
-                            &lt;/patients&gt;
-                            <span style="color:#888;font-size:0.82em">&#x2139; phone and password are optional.
-                                If password is omitted a temporary one is auto-generated
-                                and displayed after import.</span>
-                        </div>
                     </div>
                 </div>
             </div>

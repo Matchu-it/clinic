@@ -201,99 +201,6 @@ class XmlHandler
     }
 
     /**
-     * Import patients from an uploaded XML file.
-     * Expected structure:
-     *   <patients>
-     *     <patient>
-     *       <username>jdoe</username>
-     *       <email>jdoe@email.com</email>
-     *       <first_name>John</first_name>
-     *       <last_name>Doe</last_name>
-     *       <phone>09171234567</phone>      <!-- optional -->
-     *       <password>secret123</password>  <!-- optional; auto-generated if omitted -->
-     *     </patient>
-     *   </patients>
-     *
-     * @return array{imported: int, skipped: int, errors: string[], temp_passwords: array<string, string>}
-     */
-    public function importPatients(string $xmlContent): array
-    {
-        $result = ['imported' => 0, 'skipped' => 0, 'errors' => [], 'temp_passwords' => []];
-
-        $dom = new DOMDocument('1.0', 'UTF-8');
-        libxml_use_internal_errors(true);
-
-        if (!$dom->loadXML($xmlContent)) {
-            $result['errors'][] = 'Invalid XML file.';
-            return $result;
-        }
-
-        $nodes = $dom->getElementsByTagName('patient');
-
-        foreach ($nodes as $node) {
-            try {
-                $username  = $this->getNodeValue($node, 'username');
-                $email     = $this->getNodeValue($node, 'email');
-                $firstName = $this->getNodeValue($node, 'first_name');
-                $lastName  = $this->getNodeValue($node, 'last_name');
-                $phone     = $this->getNodeValue($node, 'phone');
-                $password  = $this->getNodeValue($node, 'password');
-
-                // Validate required fields
-                if (!$username || !$email || !$firstName || !$lastName) {
-                    $result['skipped']++;
-                    $result['errors'][] = "Row skipped: missing required field(s) — username, email, first_name, and last_name are all required.";
-                    continue;
-                }
-
-                // Basic email format check
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $result['skipped']++;
-                    $result['errors'][] = "Row skipped: invalid email address '$email'.";
-                    continue;
-                }
-
-                // Reject duplicate username or email
-                $existing = $this->db->fetchOne(
-                    'SELECT id FROM users WHERE username = ? OR email = ?',
-                    [$username, $email]
-                );
-                if ($existing) {
-                    $result['skipped']++;
-                    $result['errors'][] = "Row skipped: username '$username' or email '$email' already exists.";
-                    continue;
-                }
-
-                // Auto-generate a temporary password when none is supplied
-                $tempPassword = null;
-                if ($password === '') {
-                    $tempPassword = $this->generateTempPassword();
-                    $password     = $tempPassword;
-                }
-
-                $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-
-                $this->db->execute(
-                    'INSERT INTO users (username, email, password, first_name, last_name, phone, role)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [$username, $email, $hash, $firstName, $lastName, $phone ?: null, 'patient']
-                );
-                $result['imported']++;
-
-                if ($tempPassword !== null) {
-                    $result['temp_passwords'][$username] = $tempPassword;
-                }
-
-            } catch (\Exception $e) {
-                $result['skipped']++;
-                $result['errors'][] = 'Row error: ' . $e->getMessage();
-            }
-        }
-
-        return $result;
-    }
-
-    /**
      * Import doctors from an uploaded XML file.
      *
      * @return array{imported: int, skipped: int, errors: string[]}
@@ -347,20 +254,6 @@ class XmlHandler
     /* ------------------------------------------------------------------ */
     /*  HELPERS                                                             */
     /* ------------------------------------------------------------------ */
-
-    /**
-     * Generate a cryptographically random temporary password.
-     */
-    private function generateTempPassword(int $length = 10): string
-    {
-        $chars    = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$';
-        $password = '';
-        $max      = strlen($chars) - 1;
-        for ($i = 0; $i < $length; $i++) {
-            $password .= $chars[random_int(0, $max)];
-        }
-        return $password;
-    }
 
     /**
      * Create and append a text child element.
