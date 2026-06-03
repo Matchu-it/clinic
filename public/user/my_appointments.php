@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Verify ownership
     $appt = $apptModel->getById($id);
-    if (!$appt || $appt['patient_id'] !== $uid) {
+    if (!$appt || (int) $appt['patient_id'] !== $uid) {
         $message = 'Unauthorized action.';
         $msgType = 'danger';
     } elseif ($action === 'cancel') {
@@ -33,7 +33,7 @@ $viewRecord = null;
 if (isset($_GET['record'])) {
     $rid = (int) $_GET['record'];
     $rec = $apptModel->getById($rid);
-    if ($rec && $rec['patient_id'] === $uid) {
+    if ($rec && (int) $rec['patient_id'] === $uid) {
         $viewRecord = $rec;
     }
 }

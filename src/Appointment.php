@@ -6,6 +6,8 @@
 class Appointment
 {
     private Database $db;
+    private array $medicalRecordColumns = [];
+    private array $appointmentsColumns = [];
 
     public function __construct()
     {
@@ -66,30 +68,37 @@ class Appointment
         );
 
         if ($appt) {
+            $appt['id']         = (int) $appt['id'];
+            $appt['patient_id'] = (int) $appt['patient_id'];
+            $appt['doctor_id']  = (int) $appt['doctor_id'];
+
             $appt['medical_record'] = $this->db->fetchOne(
                 'SELECT * FROM medical_records WHERE appointment_id = ?', [$id]
             );
 
-            // Follow-up appointment created FROM this one
-            $appt['follow_up'] = $this->db->fetchOne(
-                "SELECT a.id, a.appointment_date, a.appointment_time, a.status, a.reason,
-                        CONCAT('Dr. ',d.first_name,' ',d.last_name) AS doctor_name
-                 FROM appointments a
-                 JOIN doctors d ON a.doctor_id = d.id
-                 WHERE a.follow_up_of = ?",
-                [$id]
-            );
+            // Follow-up support is optional; only query if the field exists.
+            if ($this->appointmentHasColumn('follow_up_of') && array_key_exists('follow_up_of', $appt)) {
+                $appt['follow_up_of'] = $appt['follow_up_of'] !== null ? (int) $appt['follow_up_of'] : null;
 
-            // Parent appointment (if this appointment IS a follow-up)
-            if (!empty($appt['follow_up_of'])) {
-                $appt['parent'] = $this->db->fetchOne(
-                    "SELECT a.id, a.appointment_date, a.appointment_time, a.status,
+                $appt['follow_up'] = $this->db->fetchOne(
+                    "SELECT a.id, a.appointment_date, a.appointment_time, a.status, a.reason,
                             CONCAT('Dr. ',d.first_name,' ',d.last_name) AS doctor_name
                      FROM appointments a
                      JOIN doctors d ON a.doctor_id = d.id
-                     WHERE a.id = ?",
-                    [(int) $appt['follow_up_of']]
+                     WHERE a.follow_up_of = ?",
+                    [$id]
                 );
+
+                if (!empty($appt['follow_up_of'])) {
+                    $appt['parent'] = $this->db->fetchOne(
+                        "SELECT a.id, a.appointment_date, a.appointment_time, a.status,
+                                CONCAT('Dr. ',d.first_name,' ',d.last_name) AS doctor_name
+                         FROM appointments a
+                         JOIN doctors d ON a.doctor_id = d.id
+                         WHERE a.id = ?",
+                        [(int) $appt['follow_up_of']]
+                    );
+                }
             }
         }
 
@@ -116,6 +125,64 @@ class Appointment
             ]
         );
         return (int) $this->db->lastInsertId();
+    }
+
+    /**
+     * Return medical_records column names for schema compatibility.
+     */
+    private function getMedicalRecordColumns(): array
+    {
+        if ($this->medicalRecordColumns === []) {
+            $rows = $this->db->fetchAll('SHOW COLUMNS FROM medical_records');
+            foreach ($rows as $row) {
+                if (!empty($row['Field'])) {
+                    $this->medicalRecordColumns[] = $row['Field'];
+                }
+            }
+        }
+        return $this->medicalRecordColumns;
+    }
+
+    private function medicalRecordHasColumn(string $column): bool
+    {
+        return in_array($column, $this->getMedicalRecordColumns(), true);
+    }
+
+    private function getAppointmentColumns(): array
+    {
+        if ($this->appointmentsColumns === []) {
+            $rows = $this->db->fetchAll('SHOW COLUMNS FROM appointments');
+            foreach ($rows as $row) {
+                if (!empty($row['Field'])) {
+                    $this->appointmentsColumns[] = $row['Field'];
+                }
+            }
+        }
+        return $this->appointmentsColumns;
+    }
+
+    private function appointmentHasColumn(string $column): bool
+    {
+        return in_array($column, $this->getAppointmentColumns(), true);
+    }
+
+    private function ensureTableColumn(string $table, string $column, string $definition): void
+    {
+        $exists = false;
+        if ($table === 'appointments') {
+            $exists = $this->appointmentHasColumn($column);
+        } elseif ($table === 'medical_records') {
+            $exists = $this->medicalRecordHasColumn($column);
+        }
+
+        if (!$exists) {
+            $this->db->execute("ALTER TABLE $table ADD COLUMN $column $definition");
+            if ($table === 'appointments') {
+                $this->appointmentsColumns = [];
+            } elseif ($table === 'medical_records') {
+                $this->medicalRecordColumns = [];
+            }
+        }
     }
 
     /**
@@ -174,6 +241,10 @@ class Appointment
      */
     public function createFollowUp(int $parentId, array $data): int
     {
+        if (!$this->appointmentHasColumn('follow_up_of')) {
+            $this->ensureTableColumn('appointments', 'follow_up_of', 'int(11) DEFAULT NULL');
+        }
+
         $parent = $this->db->fetchOne('SELECT * FROM appointments WHERE id=?', [$parentId]);
         if (!$parent) {
             throw new \InvalidArgumentException('Parent appointment not found.');
@@ -212,6 +283,9 @@ class Appointment
      */
     public function saveMedicalRecord(int $appointmentId, array $data): void
     {
+        $hasPdfPath = $this->medicalRecordHasColumn('pdf_path');
+        $hasPdfName = $this->medicalRecordHasColumn('pdf_original_name');
+
         $existing = $this->db->fetchOne(
             'SELECT id FROM medical_records WHERE appointment_id=?', [$appointmentId]
         );
@@ -223,32 +297,45 @@ class Appointment
                 $data['prescription'] ?? null,
                 $data['notes']        ?? null,
             ];
-            if (array_key_exists('pdf_path', $data)) {
+
+            if ($hasPdfPath && array_key_exists('pdf_path', $data)) {
                 $setParts[] = 'pdf_path=?';
                 $values[]   = $data['pdf_path'];
             }
-            if (array_key_exists('pdf_original_name', $data)) {
+            if ($hasPdfName && array_key_exists('pdf_original_name', $data)) {
                 $setParts[] = 'pdf_original_name=?';
                 $values[]   = $data['pdf_original_name'];
             }
+
             $values[] = $appointmentId;
             $this->db->execute(
                 'UPDATE medical_records SET ' . implode(', ', $setParts) . ' WHERE appointment_id=?',
                 $values
             );
         } else {
+            $columns      = ['appointment_id', 'diagnosis', 'prescription', 'notes'];
+            $placeholders = ['?', '?', '?', '?'];
+            $values       = [
+                $appointmentId,
+                $data['diagnosis']    ?? null,
+                $data['prescription'] ?? null,
+                $data['notes']        ?? null,
+            ];
+
+            if ($hasPdfPath) {
+                $columns[] = 'pdf_path';
+                $placeholders[] = '?';
+                $values[] = $data['pdf_path'] ?? null;
+            }
+            if ($hasPdfName) {
+                $columns[] = 'pdf_original_name';
+                $placeholders[] = '?';
+                $values[] = $data['pdf_original_name'] ?? null;
+            }
+
             $this->db->execute(
-                'INSERT INTO medical_records
-                 (appointment_id, diagnosis, prescription, notes, pdf_path, pdf_original_name)
-                 VALUES (?, ?, ?, ?, ?, ?)',
-                [
-                    $appointmentId,
-                    $data['diagnosis']         ?? null,
-                    $data['prescription']      ?? null,
-                    $data['notes']             ?? null,
-                    $data['pdf_path']          ?? null,
-                    $data['pdf_original_name'] ?? null,
-                ]
+                'INSERT INTO medical_records (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')',
+                $values
             );
         }
     }
@@ -259,6 +346,17 @@ class Appointment
      */
     public function updateMedicalRecordPdf(int $appointmentId, string $pdfPath, string $pdfOriginalName): void
     {
+        $hasPdfPath = $this->medicalRecordHasColumn('pdf_path');
+        $hasPdfName = $this->medicalRecordHasColumn('pdf_original_name');
+        if (!$hasPdfPath) {
+            $this->ensureTableColumn('medical_records', 'pdf_path', 'varchar(255) DEFAULT NULL');
+            $hasPdfPath = true;
+        }
+        if (!$hasPdfName) {
+            $this->ensureTableColumn('medical_records', 'pdf_original_name', 'varchar(255) DEFAULT NULL');
+            $hasPdfName = true;
+        }
+
         $existing = $this->db->fetchOne(
             'SELECT id FROM medical_records WHERE appointment_id=?', [$appointmentId]
         );

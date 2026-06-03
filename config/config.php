@@ -7,15 +7,15 @@
 $runtimeConfig = __DIR__ . '/runtime.php';
 if (file_exists($runtimeConfig)) {
     require_once $runtimeConfig;
-} else {
-    // Defaults (override via runtime.php generated at startup)
-    define('DB_HOST',   '127.0.0.1');
-    define('DB_PORT',   3306);
-    define('DB_NAME',   'clinic_db');
-    define('DB_USER',   'clinic_user');
-    define('DB_PASS',   'clinic_pass_2024');
-    define('DB_SOCKET', '/tmp/clinic-mysql.sock');
 }
+
+// Local defaults. Runtime config may override any of these values.
+defined('DB_HOST')   || define('DB_HOST',   '127.0.0.1');
+defined('DB_PORT')   || define('DB_PORT',   3306);
+defined('DB_NAME')   || define('DB_NAME',   'clinic_db');
+defined('DB_USER')   || define('DB_USER',   'root');
+defined('DB_PASS')   || define('DB_PASS',   '');
+defined('DB_SOCKET') || define('DB_SOCKET', '');
 
 define('APP_NAME',    'ClinicCare');
 define('APP_VERSION', '1.0.0');
