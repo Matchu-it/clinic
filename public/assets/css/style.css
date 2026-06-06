@@ -589,15 +589,11 @@ body {
     color: #a5f3fc;
     border-radius: var(--radius);
     padding: 20px;
-    font-family: Consolas, Monaco, 'Courier New', monospace;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    max-height: 450px;
-    overflow: auto;
-    white-space: pre-wrap;
-    tab-size: 4;
-    margin: 0;
-    border: 1px solid #1e293b;
+    font-family: 'Courier New', monospace;
+    font-size: .8rem;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre;
 }
 
 /* ============================================================
