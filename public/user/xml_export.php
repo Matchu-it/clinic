@@ -19,6 +19,12 @@ if (isset($_GET['download'])) {
 // Handle preview
 if (isset($_GET['preview'])) {
     $xmlOutput = $xmlHandler->exportAppointments($uid);
+
+    $dom = new DOMDocument();
+    $dom->preserveWhiteSpace = false;
+    $dom->formatOutput = true;
+    $dom->loadXML($xmlOutput);
+    $xmlOutput = $dom->saveXML();
 }
 
 $pageTitle = 'Export My Records';
@@ -53,7 +59,7 @@ include dirname(__DIR__) . '/includes/header.php';
                     <span class="fw-semibold small">XML Preview</span>
                     <a href="<?= BASE_URL ?>/user/xml_export.php" class="btn btn-sm btn-outline-secondary">Close</a>
                 </div>
-                <div class="xml-preview"><?= htmlspecialchars($xmlOutput) ?></div>
+                <pre class="xml-preview"><?= htmlspecialchars($xmlOutput) ?></pre>
             </div>
             <?php endif; ?>
         </div>
@@ -63,21 +69,21 @@ include dirname(__DIR__) . '/includes/header.php';
         <div class="form-card">
             <h6 class="fw-bold mb-3"><i class="bi bi-code-slash me-2"></i>XML Structure</h6>
             <p class="text-muted small">Your exported file will follow this structure:</p>
-<div class="xml-preview">&lt;appointments&gt;
-  &lt;appointment&gt;
-    &lt;id&gt;1&lt;/id&gt;
-    &lt;patient_name&gt;Juan Dela Cruz&lt;/patient_name&gt;
-    &lt;patient_email&gt;juan@email.com&lt;/patient_email&gt;
-    &lt;doctor_name&gt;Dr. Maria Santos&lt;/doctor_name&gt;
-    &lt;specialty&gt;General Medicine&lt;/specialty&gt;
-    &lt;appointment_date&gt;2024-07-15&lt;/appointment_date&gt;
-    &lt;appointment_time&gt;09:00:00&lt;/appointment_time&gt;
-    &lt;status&gt;confirmed&lt;/status&gt;
-    &lt;reason&gt;Annual checkup&lt;/reason&gt;
-    &lt;notes&gt;&lt;/notes&gt;
-    &lt;created_at&gt;2024-07-01 10:30:00&lt;/created_at&gt;
-  &lt;/appointment&gt;
-&lt;/appointments&gt;</div>
+            <div class="xml-preview">&lt;appointments&gt;
+                &lt;appointment&gt;
+                &lt;id&gt;1&lt;/id&gt;
+                &lt;patient_name&gt;Juan Dela Cruz&lt;/patient_name&gt;
+                &lt;patient_email&gt;juan@email.com&lt;/patient_email&gt;
+                &lt;doctor_name&gt;Dr. Maria Santos&lt;/doctor_name&gt;
+                &lt;specialty&gt;General Medicine&lt;/specialty&gt;
+                &lt;appointment_date&gt;2024-07-15&lt;/appointment_date&gt;
+                &lt;appointment_time&gt;09:00:00&lt;/appointment_time&gt;
+                &lt;status&gt;confirmed&lt;/status&gt;
+                &lt;reason&gt;Annual checkup&lt;/reason&gt;
+                &lt;notes&gt;&lt;/notes&gt;
+                &lt;created_at&gt;2024-07-01 10:30:00&lt;/created_at&gt;
+                &lt;/appointment&gt;
+                &lt;/appointments&gt;</div>
         </div>
     </div>
 </div>

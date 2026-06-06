@@ -37,6 +37,14 @@ if (isset($_GET['preview'])) {
         'appointments' => $xmlHandler->exportAppointments(),
         default        => '',
     };
+
+    if ($xmlOutput) {
+        $dom = new DOMDocument();
+        $dom->preserveWhiteSpace = false;
+        $dom->formatOutput = true;
+        $dom->loadXML($xmlOutput);
+        $xmlOutput = $dom->saveXML();
+    }
 }
 
 // Handle import
@@ -140,7 +148,7 @@ include dirname(__DIR__) . '/includes/header.php';
                     <span class="fw-semibold small">XML Preview</span>
                     <a href="<?= BASE_URL ?>/admin/xml_tools.php" class="btn btn-sm btn-outline-secondary">Close</a>
                 </div>
-                <div class="xml-preview"><?= htmlspecialchars($xmlOutput) ?></div>
+                <pre class="xml-preview"><?= htmlspecialchars($xmlOutput) ?></pre>
             </div>
             <?php endif; ?>
         </div>

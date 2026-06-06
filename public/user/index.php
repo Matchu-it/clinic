@@ -64,7 +64,9 @@ include dirname(__DIR__) . '/includes/header.php';
     <!-- Quick actions -->
     <div class="col-lg-4">
         <div class="table-card">
-            <div class="table-card-header"><h5><i class="bi bi-lightning me-2"></i>Quick Actions</h5></div>
+            <div class="table-card-header">
+                <h5><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
+            </div>
             <div class="p-4 d-grid gap-2">
                 <a href="<?= BASE_URL ?>/user/book.php" class="btn btn-primary">
                     <i class="bi bi-calendar-plus me-2"></i>Book New Appointment
@@ -97,7 +99,11 @@ include dirname(__DIR__) . '/includes/header.php';
                 <?php else: ?>
                 <table class="table">
                     <thead>
-                        <tr><th>Doctor</th><th>Date</th><th>Status</th></tr>
+                        <tr>
+                            <th>Doctor</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($recentAppts as $a): ?>
@@ -108,9 +114,12 @@ include dirname(__DIR__) . '/includes/header.php';
                             </td>
                             <td>
                                 <div><?= date('M j, Y', strtotime($a['appointment_date'])) ?></div>
-                                <small class="text-muted"><?= date('g:i A', strtotime($a['appointment_time'])) ?></small>
+                                <small
+                                    class="text-muted"><?= date('g:i A', strtotime($a['appointment_time'])) ?></small>
                             </td>
-                            <td><span class="status-badge status-<?= $a['status'] ?>"><?= ucfirst($a['status']) ?></span></td>
+                            <td><span
+                                    class="status-badge status-<?= $a['status'] ?>"><?= ucfirst($a['status']) ?></span>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
