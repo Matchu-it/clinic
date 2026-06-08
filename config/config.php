@@ -15,7 +15,6 @@ defined('DB_PORT')   || define('DB_PORT',   3306);
 defined('DB_NAME')   || define('DB_NAME',   'clinic_db');
 defined('DB_USER')   || define('DB_USER',   'root');
 defined('DB_PASS')   || define('DB_PASS',   '');
-defined('DB_SOCKET') || define('DB_SOCKET', '');
 
 define('APP_NAME',    'ClinicCare');
 define('APP_VERSION', '1.0.0');
