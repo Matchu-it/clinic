@@ -9,4 +9,4 @@ define('DB_PORT',   3306);
 define('DB_NAME',   'clinic_db');
 define('DB_USER',   'root');
 define('DB_PASS',   '');        
-define('DB_SOCKET', '');        
+     
